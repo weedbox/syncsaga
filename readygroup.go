@@ -24,6 +24,7 @@ type ReadyGroup struct {
 	timebank        *timebank.TimeBank
 	isCompleted     int32
 	actionCh        chan *ReadyGroupAction
+	completeCh      chan struct{}
 	validator       ReadyGroupValidator
 	onUpdated       ReadyGroupCallback
 	onCompleted     ReadyGroupCallback
@@ -113,6 +114,26 @@ func (rg *ReadyGroup) updateState(participantID int64, isReady bool) {
 	rg.participants[participantID] = isReady
 }
 
+func (rg *ReadyGroup) SetTimeoutInterval(interval int) {
+	rg.timeoutInterval = interval
+}
+
+func (rg *ReadyGroup) SetValidator(fn ReadyGroupValidator) {
+	rg.validator = fn
+}
+
+func (rg *ReadyGroup) OnTimeout(fn ReadyGroupCallback) {
+	rg.onTimeout = fn
+}
+
+func (rg *ReadyGroup) OnUpdated(fn ReadyGroupCallback) {
+	rg.onUpdated = fn
+}
+
+func (rg *ReadyGroup) OnCompleted(fn ReadyGroupCallback) {
+	rg.onCompleted = fn
+}
+
 func (rg *ReadyGroup) Add(participantID int64, isReady bool) {
 
 	rg.mu.Lock()
@@ -121,13 +142,16 @@ func (rg *ReadyGroup) Add(participantID int64, isReady bool) {
 	rg.participants[participantID] = isReady
 }
 
+func (rg *ReadyGroup) ResetParticipants() {
+	rg.participants = make(map[int64]bool)
+}
+
 func (rg *ReadyGroup) Start() {
 
-	if rg.actionCh != nil {
-		close(rg.actionCh)
-	}
+	rg.Stop()
 
 	rg.actionCh = make(chan *ReadyGroupAction, 256)
+	rg.completeCh = make(chan struct{}, 256)
 
 	go func() {
 		for action := range rg.actionCh {
@@ -154,7 +178,19 @@ func (rg *ReadyGroup) Start() {
 }
 
 func (rg *ReadyGroup) Stop() {
-	close(rg.actionCh)
+
+	atomic.StoreInt32(&rg.isCompleted, 0)
+
+	if rg.actionCh != nil {
+		close(rg.actionCh)
+		rg.actionCh = nil
+	}
+
+	if rg.completeCh != nil {
+		close(rg.completeCh)
+		rg.completeCh = nil
+	}
+
 	rg.timebank.Cancel()
 }
 
@@ -184,7 +220,8 @@ func (rg *ReadyGroup) Done() {
 		rg.timebank.Cancel()
 	}
 
-	rg.onCompleted(rg)
+	go rg.onCompleted(rg)
+	rg.completeCh <- struct{}{}
 }
 
 func (rg *ReadyGroup) GetParticipantStates() map[int64]bool {
@@ -199,4 +236,8 @@ func (rg *ReadyGroup) GetParticipantStates() map[int64]bool {
 	}
 
 	return states
+}
+
+func (rg *ReadyGroup) Wait() {
+	<-rg.completeCh
 }

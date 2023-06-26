@@ -129,3 +129,54 @@ func Test_ReadyGroup_Updated(t *testing.T) {
 
 	wg.Wait()
 }
+
+func Test_ReadyGroup_Reuse(t *testing.T) {
+
+	var wg sync.WaitGroup
+
+	rg := NewReadyGroup(
+		WithTimeout(0, nil),
+		WithUpdatedCallback(func(rg *ReadyGroup) {
+			t.Log("updated")
+		}),
+		WithCompletedCallback(func(rg *ReadyGroup) {
+			t.Log("completed")
+			wg.Done()
+		}),
+	)
+
+	// Initializing participants
+	for i := int64(0); i < 10; i++ {
+		rg.Add(i, false)
+	}
+
+	rg.Start()
+
+	wg.Add(1)
+	go func() {
+		for i := int64(0); i < 10; i++ {
+			rg.Ready(i)
+		}
+	}()
+
+	wg.Wait()
+
+	// Re-use
+	rg.ResetParticipants()
+
+	// Re-add participants
+	for i := int64(0); i < 10; i++ {
+		rg.Add(i, false)
+	}
+
+	rg.Start()
+
+	wg.Add(1)
+	go func() {
+		for i := int64(0); i < 10; i++ {
+			rg.Ready(i)
+		}
+	}()
+
+	wg.Wait()
+}
