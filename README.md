@@ -2,6 +2,11 @@
 
 SyncSaga is a consensus mechanism designed for game engines, aiming to achieve synchronization of game states among multiple players and maintain the coherence of the game's storyline. This project focuses on resolving synchronization issues in game development to ensure consistent and conflict-free gaming experiences among players.
 
+The following are the features provided:
+- [x] ReadyGroup - designed for waiting until all game players are ready
+- [ ] PrioritizeGroup - facilitates the resolution of conflicts among multiple players competing for a target based on varying priorities.
+- [ ] VoteGroup - manages real-time voting within a defined timeframe, enabling players to participate in decision-making processes by casting votes on specific matters.
+
 ## ReadyGroup Usage
 
 ReadyGroup is a synchronization mechanism designed for waiting until all game players are ready. It resembles the concept of sync.WaitGroup, but provides more flexibility and callbacks to manage the state of the game players.
