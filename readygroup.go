@@ -110,14 +110,6 @@ func (rg *ReadyGroup) initializeContext() {
 	ctx, cancel := context.WithCancel(context.Background())
 	rg.ctx = ctx
 	rg.done = cancel
-
-	go func() {
-
-		select {
-		case <-ctx.Done():
-		}
-
-	}()
 }
 
 func (rg *ReadyGroup) updateState(participantID int64, isReady bool) {
@@ -201,29 +193,44 @@ func (rg *ReadyGroup) Stop() {
 	atomic.StoreInt32(&rg.isCompleted, 0)
 
 	if rg.actionCh != nil {
-		close(rg.actionCh)
+		ch := rg.actionCh
 		rg.actionCh = nil
+		close(ch)
 	}
+
+	rg.timebank.Cancel()
 
 	if rg.ctx != nil {
 		rg.done()
 	}
-
-	rg.timebank.Cancel()
 }
 
 func (rg *ReadyGroup) Ready(participantID int64) {
-	rg.actionCh <- &ReadyGroupAction{
+
+	if rg.actionCh == nil {
+		return
+	}
+
+	action := &ReadyGroupAction{
 		ParticipantID: participantID,
 		IsReady:       true,
 	}
+
+	rg.actionCh <- action
 }
 
 func (rg *ReadyGroup) Discard(participantID int64) {
-	rg.actionCh <- &ReadyGroupAction{
+
+	if rg.actionCh == nil {
+		return
+	}
+
+	action := &ReadyGroupAction{
 		ParticipantID: participantID,
 		IsReady:       false,
 	}
+
+	rg.actionCh <- action
 }
 
 func (rg *ReadyGroup) Done() {
