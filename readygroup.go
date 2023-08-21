@@ -1,6 +1,7 @@
 package syncsaga
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,7 +25,8 @@ type ReadyGroup struct {
 	timebank        *timebank.TimeBank
 	isCompleted     int32
 	actionCh        chan *ReadyGroupAction
-	completeCh      chan struct{}
+	ctx             context.Context
+	done            context.CancelFunc
 	validator       ReadyGroupValidator
 	onUpdated       ReadyGroupCallback
 	onCompleted     ReadyGroupCallback
@@ -102,6 +104,22 @@ func (rg *ReadyGroup) validate() {
 	}
 }
 
+func (rg *ReadyGroup) initializeContext() {
+
+	// Initializing context
+	ctx, cancel := context.WithCancel(context.Background())
+	rg.ctx = ctx
+	rg.done = cancel
+
+	go func() {
+
+		select {
+		case <-ctx.Done():
+		}
+
+	}()
+}
+
 func (rg *ReadyGroup) updateState(participantID int64, isReady bool) {
 
 	rg.mu.Lock()
@@ -150,8 +168,9 @@ func (rg *ReadyGroup) Start() {
 
 	rg.Stop()
 
+	rg.initializeContext()
+
 	rg.actionCh = make(chan *ReadyGroupAction, 256)
-	rg.completeCh = make(chan struct{}, 256)
 
 	go func() {
 		for action := range rg.actionCh {
@@ -186,9 +205,8 @@ func (rg *ReadyGroup) Stop() {
 		rg.actionCh = nil
 	}
 
-	if rg.completeCh != nil {
-		close(rg.completeCh)
-		rg.completeCh = nil
+	if rg.ctx != nil {
+		rg.done()
 	}
 
 	rg.timebank.Cancel()
@@ -221,7 +239,8 @@ func (rg *ReadyGroup) Done() {
 	}
 
 	go rg.onCompleted(rg)
-	rg.completeCh <- struct{}{}
+
+	rg.done()
 }
 
 func (rg *ReadyGroup) GetParticipantStates() map[int64]bool {
@@ -239,5 +258,5 @@ func (rg *ReadyGroup) GetParticipantStates() map[int64]bool {
 }
 
 func (rg *ReadyGroup) Wait() {
-	<-rg.completeCh
+	<-rg.ctx.Done()
 }

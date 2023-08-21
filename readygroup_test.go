@@ -60,7 +60,7 @@ func Test_ReadyGroup_Timeout(t *testing.T) {
 	wg.Add(1)
 
 	rg := NewReadyGroup(
-		WithTimeout(1, func(rg *ReadyGroup) {
+		WithTimeout(5, func(rg *ReadyGroup) {
 			t.Log("timeout")
 
 			// Check states
